@@ -17,9 +17,8 @@
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{A5A43C5B-DE2A-4C0C-9213-0A381AF9435A};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WindowsXamlEnableOverview>true</WindowsXamlEnableOverview>
-    <PackageCertificateKeyFile>
-    </PackageCertificateKeyFile>
-    <PackageCertificateThumbprint>107C50E16C9F31893F3648D5B61E5A1BA520C006</PackageCertificateThumbprint>
+    <PackageCertificateKeyFile>RSS-Stalker_TemporaryKey.pfx</PackageCertificateKeyFile>
+    <PackageCertificateThumbprint>49B83769FB035972E73086934FB6B0C0F0059B65</PackageCertificateThumbprint>
     <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
     <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
     <AppxPackageDir>E:\Package\RSS Stalker Old\</AppxPackageDir>
@@ -232,6 +231,7 @@
     <None Include="Package.StoreAssociation.xml" />
     <Content Include="Template\Dark.css" />
     <Content Include="Template\Light.css" />
+    <None Include="RSS-Stalker_TemporaryKey.pfx" />
     <None Include="SyncConfig.json" />
     <PRIResource Include="Language\zh-CN\Resources.resw" />
     <PRIResource Include="Language\en-US\Resources.resw" />
