@@ -77,7 +77,7 @@ namespace CoreLib.Tools
         /// </summary>
         /// <param name="key">设置名</param>
         /// <returns></returns>
-        public static string GetRoamingSetting(AppSettings key,string defaultValue)
+        public static string GetRoamingSetting(AppSettings key, string defaultValue)
         {
             var roamingSetting = ApplicationData.Current.RoamingSettings;
             var roamingcontainer = roamingSetting.CreateContainer("RSS", ApplicationDataCreateDisposition.Always);
@@ -279,11 +279,12 @@ namespace CoreLib.Tools
             HttpClient client;
             client = new HttpClient(new HttpClientHandler
             {
-                AutomaticDecompression = DecompressionMethods.GZip
-                                 | DecompressionMethods.Deflate
+                ServerCertificateCustomValidationCallback = (message, cert, chain, error) => true,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
             })
             { BaseAddress = new Uri(url) };
             client.DefaultRequestHeaders.Connection.Add("keep-alive");
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; WOW64; Trident/6.0)");
             return client;
         }
         /// <summary>
@@ -291,7 +292,7 @@ namespace CoreLib.Tools
         /// </summary>
         /// <param name="url">地址</param>
         /// <returns></returns>
-        public static async Task<string> GetTextFromUrl(string url,bool isLimit=false)
+        public static async Task<string> GetTextFromUrl(string url, bool isLimit = false)
         {
             try
             {
@@ -306,7 +307,7 @@ namespace CoreLib.Tools
             {
                 return null;
             }
-            
+
         }
         /// <summary>
         /// 从URL获取实体类
@@ -337,36 +338,81 @@ namespace CoreLib.Tools
         /// <returns></returns>
         public static async Task<Channel> GetChannelFromUrl(string url)
         {
-            var client = new SyndicationClient();
-            client.Timeout = 15000;
-            var feed = new SyndicationFeed();
-            client.SetRequestHeader("User-Agent", "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; WOW64; Trident/6.0)");
-            try
+            var feed = await GetChannelFromHttpClient(url);
+            if (feed == null)
             {
-                feed = await client.RetrieveFeedAsync(new Uri(url));
-                if (feed != null)
-                {
-                    return new Channel(feed, url);
-                }
-                
+                feed = await GetChannelFromSyndicationClient(url);
             }
-            catch (Exception)
+            if (feed != null)
             {
-                
+                return new Channel(feed, url);
             }
             return null;
         }
+
+        private static async Task<SyndicationFeed> GetChannelFromSyndicationClient(string url)
+        {
+            try
+            {
+                var client = new SyndicationClient() { };
+                client.Timeout = 15000;
+                client.SetRequestHeader("User-Agent", "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; WOW64; Trident/6.0)");
+                var feed = await client.RetrieveFeedAsync(new Uri(url));
+                if (!string.IsNullOrWhiteSpace(feed?.Title?.Text))
+                {
+                    return feed;
+                }
+            }
+            catch (Exception)
+            {
+                // ignore
+            }
+            return null;
+        }
+
+        private static async Task<SyndicationFeed> GetChannelFromHttpClient(string url)
+        {
+            try
+            {
+                using (var httpclientHandler = new HttpClientHandler())
+                {
+                    httpclientHandler.ServerCertificateCustomValidationCallback = (message, cert, chain, error) => true;
+                    httpclientHandler.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                    using (var httpClient = new HttpClient(httpclientHandler))
+                    {
+                        httpClient.Timeout = new TimeSpan(0, 0, 15);
+                        httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; WOW64; Trident/6.0)");
+                        var responseText = await httpClient.GetStringAsync(new Uri(url));
+                        if (!string.IsNullOrWhiteSpace(responseText))
+                        {
+                            var feed = new SyndicationFeed();
+                            feed.Load(responseText);
+                            if (!string.IsNullOrWhiteSpace(feed?.Title?.Text))
+                            {
+                                return feed;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // ignore
+            }
+            return null;
+        }
+
         /// <summary>
         /// 从URL获取解析后的Item的信息
         /// </summary>
         /// <param name="url">地址</param>
         /// <returns></returns>
-        public static async Task<List<RssSchema>> GetSchemaFromUrl(string url,bool isLimit=false)
+        public static async Task<List<RssSchema>> GetSchemaFromUrl(string url, bool isLimit = false)
         {
             string feed = null;
             try
             {
-                feed = await GetTextFromUrl(url,isLimit);
+                feed = await GetTextFromUrl(url, isLimit);
             }
             catch (Exception)
             {
@@ -396,7 +442,7 @@ namespace CoreLib.Tools
         /// </summary>
         /// <param name="page">地址</param>
         /// <returns></returns>
-        public static async Task<List<RssSchema>> GetSchemaFromPage(CustomPage page,bool isLimit=false,Action<List<RssSchema>>Success=null)
+        public static async Task<List<RssSchema>> GetSchemaFromPage(CustomPage page, bool isLimit = false, Action<List<RssSchema>> Success = null)
         {
             var allList = new List<RssSchema>();
             var tasks = new List<Task>();
@@ -406,7 +452,7 @@ namespace CoreLib.Tools
                 {
                     tasks.Add(Task.Run(async () =>
                     {
-                        var schemas = await GetFeedsFromUrl(item.Link,isLimit);
+                        var schemas = await GetFeedsFromUrl(item.Link, isLimit);
                         if (page.Rules.Count > 0)
                         {
                             foreach (var rule in page.Rules)
@@ -438,7 +484,7 @@ namespace CoreLib.Tools
             //}
             return allList;
         }
-        public static List<RssSchema> FilterRssList(List<RssSchema> list,FilterItem rule)
+        public static List<RssSchema> FilterRssList(List<RssSchema> list, FilterItem rule)
         {
             var results = new List<RssSchema>();
             if (rule.Rule.Type == FilterRuleType.Filter)
@@ -446,13 +492,13 @@ namespace CoreLib.Tools
                 var regex = new Regex(rule.Content);
                 foreach (var item in list)
                 {
-                    if(regex.IsMatch(item.Title) || regex.IsMatch(item.Content))
+                    if (regex.IsMatch(item.Title) || regex.IsMatch(item.Content))
                     {
                         results.Add(item);
                     }
                 }
             }
-            else if(rule.Rule.Type == FilterRuleType.FilterOut)
+            else if (rule.Rule.Type == FilterRuleType.FilterOut)
             {
                 var regex = new Regex(rule.Content);
                 foreach (var item in list)
@@ -493,7 +539,7 @@ namespace CoreLib.Tools
         /// </summary>
         /// <param name="url">地址</param>
         /// <returns></returns>
-        public static async Task<List<RssSchema>> GetFeedsFromUrl(string url,bool isLimit=false, Action<List<RssSchema>> Success=null)
+        public static async Task<List<RssSchema>> GetFeedsFromUrl(string url, bool isLimit = false, Action<List<RssSchema>> Success = null)
         {
             string feed = null;
 
@@ -537,7 +583,7 @@ namespace CoreLib.Tools
                 {
 
                 }
-                
+
             }
             client.Dispose();
             Success?.Invoke(list);
@@ -590,14 +636,14 @@ namespace CoreLib.Tools
             {
                 foreach (var outline in opml.Body.Outlines)
                 {
-                    if(outline.Outlines!=null && outline.Outlines.Count > 0 && string.IsNullOrEmpty(outline.XMLUrl))
+                    if (outline.Outlines != null && outline.Outlines.Count > 0 && string.IsNullOrEmpty(outline.XMLUrl))
                     {
                         list.Add(new Category(outline));
                     }
                     else
                     {
                         var c = new Channel(outline);
-                        if(c!=null && !string.IsNullOrEmpty(c.Name))
+                        if (c != null && !string.IsNullOrEmpty(c.Name))
                         {
                             defaultCategory.Channels.Add(c);
                         }
@@ -670,15 +716,15 @@ namespace CoreLib.Tools
             // Windows.Media.SpeechSynthesis.SpeechSynthesizer
             using (SpeechSynthesizer synthesizer = new SpeechSynthesizer())
             {
-                
+
                 string gender = GetLocalSetting(AppSettings.VoiceGender, "Female");
                 VoiceGender g = gender == "Female" ? VoiceGender.Female : VoiceGender.Male;
                 double rate = Convert.ToDouble(GetLocalSetting(AppSettings.SpeechRate, "1.0"));
                 synthesizer.Options.SpeakingRate = rate;
                 string lan = synthesizer.Voice.Language;
                 synthesizer.Voice = (from voice in SpeechSynthesizer.AllVoices
-                                     where voice.Gender == g && voice.Language==lan
-                                     select voice).FirstOrDefault()?? SpeechSynthesizer.DefaultVoice;
+                                     where voice.Gender == g && voice.Language == lan
+                                     select voice).FirstOrDefault() ?? SpeechSynthesizer.DefaultVoice;
                 stream = await synthesizer.SynthesizeTextToStreamAsync(text);
             }
             return (stream);
